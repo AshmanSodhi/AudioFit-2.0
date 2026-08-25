@@ -1,0 +1,148 @@
+<style>
+  .section { margin: 0 0 1.5rem; }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .section-title { font-size: 15px; font-weight: 500; color: var(--color-text-primary); }
+  .badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+  .badge-core { background: var(--color-background-info); color: var(--color-text-info); }
+  .badge-new { background: var(--color-background-success); color: var(--color-text-success); }
+  .badge-pro { background: var(--color-background-warning); color: var(--color-text-warning); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 12px 14px; cursor: pointer; transition: border-color 0.15s; }
+  .card:hover { border-color: var(--color-border-primary); }
+  .card-icon { font-size: 16px; margin-bottom: 6px; }
+  .card-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 3px; }
+  .card-desc { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .pill { font-size: 11px; background: var(--color-background-secondary); color: var(--color-text-secondary); padding: 3px 9px; border-radius: 20px; border: 0.5px solid var(--color-border-tertiary); }
+  .top-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem; padding: 12px 16px; background: var(--color-background-secondary); border-radius: var(--border-radius-lg); }
+  .app-name { font-size: 17px; font-weight: 500; }
+  .tagline { font-size: 13px; color: var(--color-text-secondary); margin-left: auto; }
+</style>
+
+<div class="top-bar">
+  <div>
+    <div class="app-name">AudioFit</div>
+    <div style="font-size:12px;color:var(--color-text-secondary);">Complete feature architecture</div>
+  </div>
+  <div class="tagline">Music × Performance × AI</div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Core (your existing idea)</span>
+    <span class="badge badge-core">Foundation</span>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="card-icon">🎵</div><div class="card-title">Real-time music tracking</div><div class="card-desc">Detects song being played during workout</div></div>
+    <div class="card"><div class="card-icon">📊</div><div class="card-title">Song-performance correlation</div><div class="card-desc">Maps metrics (pace, HR, reps) to each song</div></div>
+    <div class="card"><div class="card-icon">📋</div><div class="card-title">Workout song history</div><div class="card-desc">Full log of every song heard per session</div></div>
+    <div class="card"><div class="card-icon">🎧</div><div class="card-title">Auto playlist creation</div><div class="card-desc">Builds playlists from your best songs</div></div>
+    <div class="card"><div class="card-icon">✨</div><div class="card-title">Song suggestions</div><div class="card-desc">AI recommends songs based on performance</div></div>
+    <div class="card"><div class="card-icon">🔄</div><div class="card-title">Spotify / YouTube sync</div><div class="card-desc">Bi-directional streaming platform sync</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Smart audio intelligence</span>
+    <span class="badge badge-new">High impact</span>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="card-icon">🥁</div><div class="card-title">BPM-cadence sync</div><div class="card-desc">Auto-matches song tempo to your running cadence or rep rhythm in real time</div></div>
+    <div class="card"><div class="card-icon">❤️</div><div class="card-title">Heart rate music gating</div><div class="card-desc">Switches to higher or lower energy songs when HR crosses your target zones</div></div>
+    <div class="card"><div class="card-icon">😮‍💨</div><div class="card-title">Fatigue-aware queue</div><div class="card-desc">Plays motivational songs when effort drops, calmer ones in cooldown</div></div>
+    <div class="card"><div class="card-icon">🔀</div><div class="card-title">Seamless crossfade</div><div class="card-desc">DJ-style transitions so music never interrupts your flow state</div></div>
+    <div class="card"><div class="card-icon">🎼</div><div class="card-title">AI-generated warmup mix</div><div class="card-desc">Generates a tempo-ramping intro tailored to your session type</div></div>
+    <div class="card"><div class="card-icon">🧘</div><div class="card-title">Cooldown score</div><div class="card-desc">Auto-switches to relaxation music + guided breathing at session end</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Advanced biometric integration</span>
+    <span class="badge badge-new">High impact</span>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="card-icon">⌚</div><div class="card-title">Wearable data hub</div><div class="card-desc">Syncs Apple Watch, Garmin, WHOOP, Oura, Fitbit in one view</div></div>
+    <div class="card"><div class="card-icon">📈</div><div class="card-title">HRV readiness score</div><div class="card-desc">Recommends playlist energy based on today's recovery level</div></div>
+    <div class="card"><div class="card-icon">🩸</div><div class="card-title">SpO₂ & stress tracking</div><div class="card-desc">Blood oxygen & stress data influences song selection intensity</div></div>
+    <div class="card"><div class="card-icon">🏃</div><div class="card-title">Cadence / stride analysis</div><div class="card-desc">Measures steps per minute and adjusts music BPM accordingly</div></div>
+    <div class="card"><div class="card-icon">💪</div><div class="card-title">Rep counter</div><div class="card-desc">Uses accelerometer to count reps and sync beat drops to lifts</div></div>
+    <div class="card"><div class="card-icon">🔥</div><div class="card-title">Calorie-song map</div><div class="card-desc">Shows which songs burned the most calories historically</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">AI coaching & insights</span>
+    <span class="badge badge-pro">Differentiator</span>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="card-icon">🤖</div><div class="card-title">AI workout coach</div><div class="card-desc">Conversational assistant that plans sessions and adjusts playlists to your goals</div></div>
+    <div class="card"><div class="card-icon">🗓️</div><div class="card-title">Training plan builder</div><div class="card-desc">Multi-week plans with music curated for each phase (base, peak, taper)</div></div>
+    <div class="card"><div class="card-icon">📉</div><div class="card-title">Performance trend alerts</div><div class="card-desc">Detects when a song consistently improves or hurts your metrics</div></div>
+    <div class="card"><div class="card-icon">🎯</div><div class="card-title">Genre × goal matching</div><div class="card-desc">Learns that heavy metal = PRs but pop = better zone 2 runs for you</div></div>
+    <div class="card"><div class="card-icon">🛌</div><div class="card-title">Sleep & recovery music</div><div class="card-desc">Post-workout wind-down playlists based on session intensity</div></div>
+    <div class="card"><div class="card-icon">🔮</div><div class="card-title">PR predictor</div><div class="card-desc">Forecasts personal record potential based on today's readiness + playlist</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Social & gamification</span>
+    <span class="badge badge-new">Retention engine</span>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="card-icon">🏆</div><div class="card-title">Song leaderboards</div><div class="card-desc">See who ran fastest to the same song globally or among friends</div></div>
+    <div class="card"><div class="card-icon">🎁</div><div class="card-title">Workout streaks & badges</div><div class="card-desc">Earn badges for milestones: "Iron Playlist", "BPM Beast", "Zone 5 DJ"</div></div>
+    <div class="card"><div class="card-icon">👥</div><div class="card-title">Crew challenges</div><div class="card-desc">Group fitness challenges where everyone shares the same playlist</div></div>
+    <div class="card"><div class="card-icon">📤</div><div class="card-title">Session sharing</div><div class="card-desc">Share workout + playlist as a story card to Instagram, WhatsApp, X</div></div>
+    <div class="card"><div class="card-icon">🎙️</div><div class="card-title">Community playlist voting</div><div class="card-desc">Users vote on the best gym, run, and HIIT playlists each week</div></div>
+    <div class="card"><div class="card-icon">🏅</div><div class="card-title">Monthly music awards</div><div class="card-desc">"Top song of the month" by activity type based on community data</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Platform & integrations</span>
+    <span class="badge badge-core">Ecosystem</span>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="card-icon">🍎</div><div class="card-title">Apple Music & Health sync</div><div class="card-desc">Full HealthKit integration + Apple Music library access</div></div>
+    <div class="card"><div class="card-icon">🤸</div><div class="card-title">Strava & Nike Run sync</div><div class="card-desc">Push workout + playlist data to popular fitness platforms</div></div>
+    <div class="card"><div class="card-icon">🏋️</div><div class="card-title">Smart gym equipment</div><div class="card-desc">Syncs with connected treadmills, bikes, and resistance machines via BLE</div></div>
+    <div class="card"><div class="card-icon">🗣️</div><div class="card-title">Voice control</div><div class="card-desc">"Hey AudioFit, push harder playlist" mid-run hands-free commands</div></div>
+    <div class="card"><div class="card-icon">📴</div><div class="card-title">Offline mode</div><div class="card-desc">Downloads playlists + AI recommendations for no-wifi use</div></div>
+    <div class="card"><div class="card-icon">🌍</div><div class="card-title">Apple Watch / WearOS app</div><div class="card-desc">Standalone watch app controls music and captures biometrics</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Personalisation & wellness</span>
+    <span class="badge badge-pro">Retention</span>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="card-icon">🧬</div><div class="card-title">Audio DNA profile</div><div class="card-desc">Unique fingerprint of what music makes you perform best, built over time</div></div>
+    <div class="card"><div class="card-icon">🌤️</div><div class="card-title">Mood + weather aware</div><div class="card-desc">Adjusts playlist vibe based on your mood input and local weather</div></div>
+    <div class="card"><div class="card-icon">🥗</div><div class="card-title">Nutrition tie-in</div><div class="card-desc">Links pre-workout meal logs to energy and performance correlation</div></div>
+    <div class="card"><div class="card-icon">🧠</div><div class="card-title">Mental load tracker</div><div class="card-desc">Stress + focus scores from wearable to modulate playlist intensity</div></div>
+    <div class="card"><div class="card-icon">🔔</div><div class="card-title">Smart reminders</div><div class="card-desc">"Your top-performing playlist is ready — best window to train is 6 PM"</div></div>
+    <div class="card"><div class="card-icon">🎨</div><div class="card-title">Custom workout themes</div><div class="card-desc">Visual + audio themes per workout type — dark for lifting, bright for runs</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">
+    <span class="section-title">Monetization hooks</span>
+    <span class="badge badge-pro">Business model</span>
+  </div>
+  <div class="pill-row">
+    <span class="pill">Freemium — 3 playlists free</span>
+    <span class="pill">Pro subscription ($6.99/mo)</span>
+    <span class="pill">Athlete tier with coach AI</span>
+    <span class="pill">Gym / studio B2B license</span>
+    <span class="pill">Branded playlist partnerships</span>
+    <span class="pill">Personal trainer white-label</span>
+  </div>
+</div>

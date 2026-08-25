@@ -1,0 +1,4 @@
+1. make your dataset from spotify
+2. build recommendation system using it -> efficient ways to do it, vector embeddings and all, look into it. 
+3. Add the model to the app. Fix the recommendation and static data available in the app as of now.
+4. 
