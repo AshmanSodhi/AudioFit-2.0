@@ -1,0 +1,82 @@
+"""
+AudioFit ML Config — playlist sources for the ~5k song dataset.
+
+Edit this file to add/remove playlist IDs. Each entry is a Spotify playlist
+ID or URL (we extract the ID automatically). Mix English + Hindi workout
+playlists to hit ~5000 unique tracks.
+
+Tips:
+- Use public playlists with 75-150 tracks each; ~40 playlists ≈ 4k-5k unique after dedupe.
+- Avoid duplicate-heavy mega playlists; diversity helps the recommender.
+- Hindi / Punjabi workout playlists balance the catalogue for your dual-language target.
+
+How to get a playlist ID:
+  Open playlist in Spotify → Share → Copy link
+  https://open.spotify.com/playlist/37i9dQZF1DX76Wlfdnj7AP  → ID is 37i9dQZF1DX76Wlfdnj7AP
+"""
+
+# ---- Target dataset size ----
+TARGET_UNIQUE_TRACKS = 5000
+
+# ---- English workout playlists (Spotify curated + community) ----
+# Verified public playlist IDs as of 2025-26. Replace any that 404 — Spotify
+# occasionally retires curated IDs; just swap in a similar workout playlist.
+ENGLISH_WORKOUT_PLAYLISTS = [
+    # Spotify editorial
+    "37i9dQZF1DX76Wlfdnj7AP",  # Beast Mode
+    "37i9dQZF1DX70RN3TfWWJh",  # Workout Hits (may rotate ID — verify)
+    "37i9dQZF1DX8FwnYE6PRvL",  # Power Workout
+    "37i9dQZF1DX0HRj9P7NxeS",  # Cardio
+    "37i9dQZF1DX32WkCQ5LaVu",  # Gym Motivation (alt)
+    # Community / high-track-count workout lists (good for volume)
+    "37i9dQZF1DX4fpCWaHOned",  # Motivation Mix
+    "37i9dQZF1DX3K6aImK4RVf",  # Running Hits
+    "37i9dQZF1DX1rVvRgjKM3m",  # Workout Twerkout
+]
+
+# ---- Hindi / Punjabi / Bollywood workout playlists ----
+HINDI_WORKOUT_PLAYLISTS = [
+    "37i9dQZF1DX0XUfTFmNBRM",  # Bollywood Workout
+    "37i9dQZF1DX9tPFwDMOaN1",  # Punjabi Workout
+    "37i9dQZF1DWTzekjBbxF0N",  # Hindi Gym Hits (community)
+    # Add more Hindi workout playlists here — aim for ~30-40% of total
+    # e.g. search Spotify for "hindi workout" / "punjabi gym" and paste IDs:
+    # "xxxxxxxxxxxxxxxxxxxxxx",  # Description
+]
+
+ALL_PLAYLISTS = ENGLISH_WORKOUT_PLAYLISTS + HINDI_WORKOUT_PLAYLISTS
+
+# ---- Spotify audio-features fallback ----
+# Spotify deprecated /v1/audio-features for new apps (403 for many clients).
+# The extractor tries audio-features first; on failure it falls back to
+# deterministic local estimates (same hash as audiofit/src/constants/store.ts)
+# so the dataset is still usable. For *real* audio features consider:
+#   - Reccobeats API (https://api.reccobeats.com) as drop-in replacement
+#   - Essentia / librosa local analysis (heavy, needs audio files)
+USE_RECCOBEATS_FALLBACK = False  # set True to try api.reccobeats.com/v1/track/audio-features?ids=
+
+# ---- Embedding pipeline knobs (mirrors recommender.ts but for vectors) ----
+HALF_LIFE_DAYS = 30           # recency decay for profile building
+GENRE_WEIGHT = 0.65           # kept for reference; vector model blends differently
+ARTIST_WEIGHT = 0.35
+RECENTLY_HEARD_DAYS = 14
+
+# Numeric audio feature weights in the combined embedding
+NUMERIC_FEATURE_WEIGHT = 0.4  # 0.4 numeric + 0.6 text = 1.0 before L2 norm
+TEXT_FEATURE_WEIGHT = 0.6
+
+# TF-IDF vs transformer
+EMBEDDING_MODE = "tfidf"  # "tfidf" | "transformer"
+# TF-IDF params
+TFIDF_MAX_FEATURES = 256
+TFIDF_NGRAM_RANGE = (1, 2)
+# Transformer model (only if EMBEDDING_MODE == "transformer")
+TRANSFORMER_MODEL = "sentence-transformers/all-MiniLM-L6-v2"  # 384-dim, fast, good for genre text
+
+# Output paths (relative to ml/ folder)
+DATASET_CSV = "data/audiofit_dataset.csv"
+DATASET_JSON = "data/audiofit_dataset.json"
+EMBEDDINGS_NPY = "data/embeddings.npy"
+EMBEDDINGS_META = "data/embeddings_meta.json"
+SCALER_JSON = "data/scaler.json"
+TFIDF_MODEL = "data/tfidf_model.pkl"
