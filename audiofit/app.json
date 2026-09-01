@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "audiofit",
+    "slug": "audiofit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "audiofit",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AudioFit requires access to your location to measure physical speed, running pace, and distance.",
+        "NSMotionUsageDescription": "AudioFit requires access to motion data to track your step count and estimate running cadence for music tempo synchronization."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACTIVITY_RECOGNITION"
+      ],
+      "package": "com.ashmansodhi.audiofit",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCtQ2a9HoRk3_ZXxlJI0VwBX2smKz1C9XI"
+        }
+      }
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "ndkVersion": "26.1.10909125"
+          }
+        }
+      ],
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "15b425f0-818d-42d6-8917-77476fa04cdf"
+      }
+    },
+    "owner": "ashmansodhi"
+  }
+}
