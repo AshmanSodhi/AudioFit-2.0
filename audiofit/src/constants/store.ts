@@ -240,12 +240,17 @@ class AppStore {
   // Connect Real Spotify session (Authorization Code with PKCE)
   connectSpotify(
     user: SpotifyState['user'],
-    tokens: { accessToken: string; refreshToken?: string | null; expiresIn?: number }
+    tokens: { accessToken: string; refreshToken?: string | null; expiresIn?: number },
+    clientId?: string | null
   ) {
     this.spotify.isConnected = true;
     this.spotify.accessToken = tokens.accessToken;
     this.spotify.refreshToken = tokens.refreshToken ?? null;
     this.spotify.tokenExpiresAt = tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : null;
+    // Persist the Client ID actually used for auth — refreshAccessToken needs it.
+    // (Previously the default/demo ID was used for login but never saved,
+    // so every refresh silently failed and search 401'd after token expiry.)
+    if (clientId) this.spotify.clientId = clientId;
     this.spotify.user = user;
     this.persistSpotify();
     this.notify();
@@ -294,9 +299,13 @@ class AppStore {
 
   // Returns a usable access token, refreshing it first when near/after expiry.
   async getValidAccessToken(): Promise<string | null> {
-    const { accessToken, tokenExpiresAt } = this.spotify;
+    const { accessToken, tokenExpiresAt, refreshToken } = this.spotify;
     if (!accessToken) return null;
-    if (!tokenExpiresAt || tokenExpiresAt - Date.now() < 5 * 60 * 1000) {
+    // Demo tokens can't be refreshed — return as-is so callers can show a clear message.
+    if (accessToken.startsWith('demo_')) return accessToken;
+    // Only attempt a refresh when we know expiry is near AND have a refresh token.
+    // (Older persisted sessions have tokenExpiresAt === null — don't spam refresh.)
+    if (refreshToken && tokenExpiresAt && tokenExpiresAt - Date.now() < 5 * 60 * 1000) {
       const refreshed = await this.refreshAccessToken();
       if (refreshed) return refreshed;
     }

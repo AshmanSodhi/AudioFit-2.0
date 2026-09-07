@@ -11,12 +11,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Check, Music, Search, Sparkles, Trash2, X } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Check, Music, Search, Sparkles, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/Button';
 import { store } from '@/constants/store';
 import { MIN_FAVORITE_SONGS } from '@/constants/audioFeatures';
-import { resolveAudioFeatures } from '@/constants/mlRecommender';
+import { API_BASE_URL, resolveAudioFeatures } from '@/constants/mlRecommender';
 import { searchSpotifyTracks, SpotifySearchHit } from '@/services/spotifyWrite';
 
 interface PickableSong {
@@ -29,6 +30,40 @@ interface PickableSong {
 }
 
 const SEARCH_DEBOUNCE_MS = 500;
+const TASTE_CARD_KEY = '@audiofit/taste_card';
+const TASTE_MAX_LEN = 500;
+const TASTE_TIMEOUT_MS = 90000;
+
+// POST /create_taste_card song payload: full 9 feats + names where available.
+interface TasteSongPayload {
+  acousticness: number;
+  danceability: number;
+  energy: number;
+  instrumentalness: number;
+  liveness: number;
+  loudness: number;
+  speechiness: number;
+  tempo: number;
+  valence: number;
+  track_name?: string;
+  artist_name?: string;
+  language?: string;
+}
+
+async function postTasteCard(body: Record<string, unknown>): Promise<Response> {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), TASTE_TIMEOUT_MS);
+  try {
+    return await fetch(`${API_BASE_URL}/create_taste_card`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: c.signal,
+    });
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 export default function OnboardingFavoritesScreen() {
   const colors = useTheme();
@@ -45,10 +80,13 @@ export default function OnboardingFavoritesScreen() {
   }, []);
 
   // Library = real synced Spotify tracks (have trackIds).
+  // Key includes the list index: the same track can legitimately appear
+  // multiple times (re-syncs, workout-added songs), and trackId-only keys
+  // caused "two children with the same key" warnings.
   const librarySongs: PickableSong[] = useMemo(
     () =>
       spotifyState.recentlyPlayed.map((s, i) => ({
-        key: `library-${(s as any).trackId ?? i}`,
+        key: `library-${(s as any).trackId ?? 'noid'}-${i}`,
         title: s.title,
         artist: s.artist,
         trackId: (s as any).trackId,
@@ -74,25 +112,49 @@ export default function OnboardingFavoritesScreen() {
       setIsSearching(true);
       setSearchError(null);
       try {
-        const token = await store.getValidAccessToken();
+        let token = await store.getValidAccessToken();
         if (seq !== searchSeq.current) return;
         if (!token) {
           setIsSearching(false);
           setSearchError('Spotify session expired. Reconnect in the Spotify & DNA tab.');
           return;
         }
-        const results = await searchSpotifyTracks(token, query.trim(), 20);
-        if (seq !== searchSeq.current) return;
-        setHits(results);
-        setIsSearching(false);
+        try {
+          const results = await searchSpotifyTracks(token, query.trim(), 20);
+          if (seq !== searchSeq.current) return;
+          setHits(results);
+          setIsSearching(false);
+        } catch (firstErr: any) {
+          // One retry with a force-refreshed token on 401, then surface the real cause.
+          if (String(firstErr?.message || '').includes('401')) {
+            const retried = await store.refreshAccessToken();
+            if (retried) {
+              const results = await searchSpotifyTracks(retried, query.trim(), 20);
+              if (seq !== searchSeq.current) return;
+              setHits(results);
+              setIsSearching(false);
+              return;
+            }
+          }
+          throw firstErr;
+        }
       } catch (e: any) {
         if (seq !== searchSeq.current) return;
         setIsSearching(false);
         const msg = String(e?.message || '');
+        console.warn('[favorites] live Spotify search failed:', msg);
         setSearchError(
           msg.includes('401')
             ? 'Spotify session expired. Reconnect in the Spotify & DNA tab.'
-            : 'Search failed. Check your connection and try again.'
+            : msg.includes('demo mode')
+              ? 'Demo mode has no live search — connect your real Spotify account in the Spotify & DNA tab.'
+              : msg.includes('Network error')
+                ? `Couldn't reach Spotify (${msg}). Check your connection and try again.`
+                : msg.includes('429')
+                  ? 'Spotify is rate-limiting searches. Wait a few seconds and try again.'
+                  : msg.includes('(404)')
+                    ? 'Spotify couldn\'t process that search text. Try simpler words (no symbols).'
+                    : 'Search failed. Check your connection and try again.'
         );
       }
     }, SEARCH_DEBOUNCE_MS);
@@ -100,10 +162,11 @@ export default function OnboardingFavoritesScreen() {
   }, [searchActive, query, spotifyState.isConnected]);
 
   // Stale hits are hidden at render time when search is inactive.
+  // Index in the key guards against duplicate ids in one response batch.
   const searchSongs: PickableSong[] = useMemo(
     () =>
-      (searchActive ? hits : []).map((h) => ({
-        key: `search-${h.id}`,
+      (searchActive ? hits : []).map((h, i) => ({
+        key: `search-${h.id}-${i}`,
         title: h.title,
         artist: h.artist,
         trackId: h.id,
@@ -122,9 +185,29 @@ export default function OnboardingFavoritesScreen() {
     );
   }, [librarySongs, query]);
 
-  // Selection kept in a map so picks survive list/search changes (tracked tray below).
+  // Selection kept in a map so picks survive list/search changes.
+  // (Selected rows show a check mark in place — no separate tray.)
   const [selectedMap, setSelectedMap] = useState<Map<string, PickableSong>>(new Map());
   const selected = useMemo(() => [...selectedMap.values()], [selectedMap]);
+
+  // Optional free-text taste note, stored as the taste card for hybrid AI picks.
+  const [tasteText, setTasteText] = useState('');
+  useEffect(() => {
+    AsyncStorage.getItem(TASTE_CARD_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          if (typeof parsed === 'string') setTasteText(parsed);
+          else if (parsed && typeof (parsed as { text?: unknown }).text === 'string') {
+            setTasteText((parsed as { text: string }).text);
+          }
+        } catch {
+          setTasteText(raw);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const toggle = (song: PickableSong) => {
     setSelectedMap((prev) => {
@@ -138,6 +221,7 @@ export default function OnboardingFavoritesScreen() {
   const [phase, setPhase] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   const canSubmit = selected.length >= MIN_FAVORITE_SONGS && !isSubmitting;
@@ -148,10 +232,12 @@ export default function OnboardingFavoritesScreen() {
       return;
     }
     setError(null);
+    setNotice(null);
     setIsSubmitting(true);
     try {
       console.log('[onboarding] profile creation started, favorites:', selected.length);
       const favorites = [];
+      const tasteSongs: TasteSongPayload[] = [];
       let i = 0;
       for (const p of selected) {
         i += 1;
@@ -160,9 +246,59 @@ export default function OnboardingFavoritesScreen() {
         const { features, estimated } = await resolveAudioFeatures(seed);
         if (estimated) console.log('[onboarding] estimated features for:', p.title);
         favorites.push(features);
+        // Full 9 feats + names — bare ids are rejected by /create_taste_card.
+        tasteSongs.push({ ...features, track_name: p.title, artist_name: p.artist });
       }
       setPhase('Creating your profile…');
       await store.createProfileFromFavorites(favorites);
+
+      // Taste card: backend-made from the same songs + vibe text.
+      const trimmedTaste = tasteText.trim().slice(0, TASTE_MAX_LEN);
+      setPhase('Creating your taste card…');
+      const [storedLang, storedProv] = await Promise.all([
+        AsyncStorage.getItem('@audiofit/ai_language'),
+        AsyncStorage.getItem('@audiofit/provider'),
+      ]);
+      const language =
+        storedLang === 'english' || storedLang === 'hindi' || storedLang === 'mix' ? storedLang : 'mix';
+      const provider = storedProv === 'mistral' || storedProv === 'gemini' ? storedProv : 'gemini';
+      try {
+        if (tasteSongs.length < 3) throw new Error('Pick at least 3 songs.');
+        const body = { favorite_songs: tasteSongs, vibe_text: trimmedTaste, language, provider };
+        let res = await postTasteCard(body);
+        if (res.status === 502) res = await postTasteCard(body); // one retry on LLM bad JSON
+        if (!res.ok) {
+          const t = await res.text().catch(() => '');
+          throw new Error(`taste-card ${res.status}: ${t.slice(0, 200)}`);
+        }
+        const data = await res.json();
+        if (!data?.taste_card) throw new Error('Invalid taste card response.');
+        // Same key the AI page reads — verified against its AsyncStorage.getItem call.
+        await AsyncStorage.setItem(TASTE_CARD_KEY, JSON.stringify(data.taste_card));
+        console.log('[onboarding] taste card created, model:', data?.model);
+      } catch (tcErr: any) {
+        // Local-save fallback — never leave the key empty after submit.
+        try {
+          const existing = await AsyncStorage.getItem(TASTE_CARD_KEY);
+          if (!existing) {
+            await AsyncStorage.setItem(
+              TASTE_CARD_KEY,
+              JSON.stringify({
+                taste_summary: trimmedTaste || language,
+                languages: language,
+                likes: trimmedTaste ? [trimmedTaste] : [],
+                avoids: [],
+                archetype_hint: '',
+                fallback: true,
+              })
+            );
+          }
+        } catch {
+          // ignore storage failure
+        }
+        console.log('[onboarding] taste card backend failed, local fallback kept:', tcErr?.message);
+        setNotice('Saved locally — AI will still use your vibe.');
+      }
       console.log('[onboarding] profile successfully created');
       setDone(true);
       setPhase(null);
@@ -177,7 +313,14 @@ export default function OnboardingFavoritesScreen() {
 
   const handleReset = async () => {
     await store.clearUserProfile();
+    try {
+      await AsyncStorage.removeItem(TASTE_CARD_KEY);
+    } catch {
+      // ignore storage failure
+    }
     setSelectedMap(new Map());
+    setTasteText('');
+    setNotice(null);
     setDone(false);
   };
 
@@ -237,8 +380,8 @@ export default function OnboardingFavoritesScreen() {
         <View style={[styles.infoCard, { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder }]}>
           <Sparkles size={18} color={colors.accent} />
           <Text style={[styles.infoText, { color: colors.textSecondary }]}>
-            Search Spotify and tap at least {MIN_FAVORITE_SONGS} songs you love training to. Your
-            picks stay tracked below while you keep searching.
+            Search Spotify and tap at least {MIN_FAVORITE_SONGS} songs you love training to.
+            Selected songs show a check mark — your progress is in the counter above.
           </Text>
         </View>
 
@@ -279,38 +422,6 @@ export default function OnboardingFavoritesScreen() {
           </View>
         ) : (
           <>
-            {/* Tracked picks */}
-            {selected.length > 0 && (
-              <>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  Your picks ({selected.length})
-                </Text>
-                <View style={styles.list}>
-                  {selected.map((s) => (
-                    <View
-                      key={`sel-${s.key}`}
-                      style={[styles.songCard, styles.selectedCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}
-                    >
-                      {s.image ? (
-                        <Image source={{ uri: s.image }} style={styles.thumb} />
-                      ) : (
-                        <View style={[styles.thumbFallback, { backgroundColor: colors.backgroundSelected }]}>
-                          <Music size={14} color={colors.primary} />
-                        </View>
-                      )}
-                      <View style={styles.songMeta}>
-                        <Text style={[styles.songTitle, { color: colors.text }]} numberOfLines={1}>{s.title}</Text>
-                        <Text style={[styles.songArtist, { color: colors.textSecondary }]} numberOfLines={1}>{s.artist}</Text>
-                      </View>
-                      <Pressable onPress={() => toggle(s)} hitSlop={8} style={styles.removeBtn}>
-                        <X size={16} color={colors.textSecondary} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-
             {/* Live Spotify results */}
             {query.trim().length >= 2 && spotifyState.isConnected && (
               <>
@@ -343,7 +454,21 @@ export default function OnboardingFavoritesScreen() {
               )}
             </View>
 
+            {/* Optional taste note */}
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Your vibe <Text style={[styles.optionalTag, { color: colors.textSecondary }]}>(optional)</Text>
+            </Text>
+            <TextInput
+              value={tasteText}
+              onChangeText={(t) => setTasteText(t.slice(0, TASTE_MAX_LEN))}
+              placeholder="e.g. High-energy Punjabi hip-hop for runs, mellow acoustic for cooldowns…"
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              style={[styles.tasteInput, { color: colors.text, borderColor: colors.cardBorder, backgroundColor: colors.backgroundElement }]}
+            />
+
             {error && <Text style={styles.errorText}>{error}</Text>}
+            {notice && <Text style={[styles.notice, { color: colors.accent }]}>{notice}</Text>}
             {phase && (
               <View style={styles.phaseRow}>
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -392,18 +517,19 @@ const styles = StyleSheet.create({
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 },
   searchInput: { flex: 1, fontSize: 14 },
   sectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 10, marginTop: 6 },
+  optionalTag: { fontSize: 12, fontWeight: '400' },
+  tasteInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, minHeight: 64, textAlignVertical: 'top', marginBottom: 16 },
   list: { gap: 8, marginBottom: 16 },
   songCard: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, padding: 12 },
-  selectedCard: { borderWidth: 1.5 },
   check: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   thumb: { width: 40, height: 40, borderRadius: 6 },
   thumbFallback: { width: 40, height: 40, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
   songMeta: { flex: 1 },
   songTitle: { fontSize: 13.5, fontWeight: '600' },
   songArtist: { fontSize: 11, marginTop: 1 },
-  removeBtn: { padding: 6 },
   empty: { textAlign: 'center', fontSize: 13, paddingVertical: 20 },
   errorText: { color: '#FF3B30', fontSize: 12.5, fontWeight: '600', marginBottom: 10, textAlign: 'center' },
+  notice: { fontSize: 12.5, fontWeight: '600', marginBottom: 10, textAlign: 'center' },
   phaseRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 10 },
   phaseText: { fontSize: 12 },
   submitBtn: { alignSelf: 'stretch' },

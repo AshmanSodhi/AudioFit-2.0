@@ -43,19 +43,43 @@ export interface SpotifySearchHit {
 export async function searchSpotifyTracks(token: string, query: string, limit = 20): Promise<SpotifySearchHit[]> {
   const q = query.trim();
   if (!q) return [];
-  const res = await fetch(
-    `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=${Math.min(Math.max(limit, 1), 50)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (res.status === 401) throw new Error('401: Spotify session expired');
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`Search failed (${res.status}): ${t.slice(0, 200)}`);
+  if (!token || token.startsWith('demo_')) {
+    throw new Error('401: demo mode — connect a real Spotify account to search live');
   }
-  const data = await res.json();
+  let res: Response;
+  // Spotify's query parser is Lucene-like: unclosed quotes, colons, hashes etc.
+  // in raw user text can make /v1/search return 400/404. First try the raw
+  // query, then fall back to a sanitised plain-text version.
+  const sanitised = q.replace(/["“”‘’#:+*?~^\\[\]{}()!&|-]/g, ' ').replace(/\s+/g, ' ').trim() || q;
+  const attempts = sanitised !== q ? [q, sanitised] : [q];
+  let lastError: Error | null = null;
+  for (const attempt of attempts) {
+    try {
+      res = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(attempt)}&type=track&limit=${Math.min(Math.max(limit, 1), 5)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (e: any) {
+      // Network-level failure (offline, DNS, CORS blocked) — surface distinctly.
+      throw new Error(`Network error: ${e?.message || 'could not reach api.spotify.com'}`);
+    }
+    if (res!.status === 401) throw new Error('401: Spotify session expired');
+    if (res!.status === 403) throw new Error('403: Spotify rejected the request (check app scopes/region)');
+    if (res!.status === 429) throw new Error('429: Spotify rate limit — wait a few seconds and retry');
+    if (res!.ok) break;
+    const t = await res!.text().catch(() => '');
+    lastError = new Error(`Search failed (${res!.status}): ${t.slice(0, 200)}`);
+    // Only retry with the sanitised query on query-syntax rejections.
+    if (res!.status !== 400 && res!.status !== 404) throw lastError;
+  }
+  if (!res!.ok) throw lastError!;
+  const data = await res!.json();
   const items = data?.tracks?.items ?? [];
+  // Dedupe by track id — Spotify occasionally returns the same track twice,
+  // which previously caused React duplicate-key warnings downstream.
+  const seen = new Set<string>();
   return items
-    .filter((t: any) => t && t.id)
+    .filter((t: any) => t && t.id && !seen.has(t.id) && (seen.add(t.id), true))
     .map((t: any) => ({
       id: t.id as string,
       title: (t.name ?? 'Unknown title') as string,
