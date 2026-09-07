@@ -14,6 +14,7 @@ export default function RootLayout() {
       <AnimatedSplashOverlay />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding-favorites" options={{ headerShown: false, presentation: 'card' }} />
         <Stack.Screen name="activity/[id]" options={{ headerShown: false, presentation: 'card' }} />
         <Stack.Screen name="spotify-auth" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>

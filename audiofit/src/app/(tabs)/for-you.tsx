@@ -7,12 +7,15 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import {
   Sparkles,
   RefreshCw,
   Music,
   ListMusic,
   Gauge,
+  UserCheck,
+  UserPlus,
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/use-theme';
 import { Button } from '@/components/Button';
@@ -34,16 +37,36 @@ function historySignature(): string {
 
 export default function ForYouScreen() {
   const colors = useTheme();
+  const router = useRouter();
 
   const [profile, setProfile] = useState<PreferenceProfile | null>(null);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  // V1 (generic) + V2 (personalized) share the same Recommendation model/UI.
+  const [v1Recs, setV1Recs] = useState<Recommendation[]>([]);
+  const [v2Recs, setV2Recs] = useState<Recommendation[]>([]);
+  const [v2Error, setV2Error] = useState<string | null>(null);
+  const [hasUserProfile, setHasUserProfile] = useState(store.hasUserProfile());
   const [isLoading, setIsLoading] = useState(true);
+  const recommendations = v1Recs;
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
+    setV2Error(null);
     setProfile(store.getPreferenceProfile());
-    const recs = await store.getRecommendations({ limit: 12, includeHeard: false });
-    setRecommendations(recs);
+    setHasUserProfile(store.hasUserProfile());
+    // V1 always runs (existing flow, untouched).
+    const v1 = await store.getRecommendations({ limit: 12, includeHeard: false });
+    setV1Recs(v1);
+    // V2 only when a valid profile exists; otherwise V1 stands alone.
+    if (store.hasUserProfile()) {
+      try {
+        setV2Recs(await store.getV2Recommendations(10));
+      } catch (e: any) {
+        setV2Recs([]);
+        setV2Error(e?.message || 'Personalized picks unavailable.');
+      }
+    } else {
+      setV2Recs([]);
+    }
     setIsLoading(false);
   }, []);
 
@@ -66,6 +89,39 @@ export default function ForYouScreen() {
   }, []);
 
   const hasHistory = (profile?.totalListens ?? 0) > 0;
+
+  const renderRecCard = (rec: Recommendation, idx: number) => (
+    <View
+      key={`${rec.song.artist}-${rec.song.title}-${idx}`}
+      style={[
+        styles.recCard,
+        { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder },
+      ]}
+    >
+      <View style={styles.recRank}>
+        <Text style={[styles.recRankText, { color: colors.primary }]}>{idx + 1}</Text>
+      </View>
+
+      <View style={styles.recMeta}>
+        <Text style={[styles.recTitle, { color: colors.text }]} numberOfLines={1}>
+          {rec.song.title}
+        </Text>
+        <Text style={[styles.recArtist, { color: colors.textSecondary }]} numberOfLines={1}>
+          {rec.song.artist}{rec.song.bpm ? ` · ${rec.song.bpm} BPM` : ''}
+        </Text>
+        {rec.reasons.length > 0 && (
+          <Text style={[styles.recReason, { color: colors.accent }]} numberOfLines={1}>
+            {rec.reasons[0]}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.scoreWrap}>
+        <Gauge size={14} color={colors.primary} />
+        <Text style={[styles.scoreText, { color: colors.primary }]}>{rec.score}%</Text>
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
@@ -139,10 +195,59 @@ export default function ForYouScreen() {
             )}
           </View>
 
-          {/* Recommendations */}
+          {/* Personalization banner */}
+          <View style={[styles.profileCard, { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder }]}>
+            <View style={styles.profileHeader}>
+              {hasUserProfile ? <UserCheck size={20} color={colors.primary} /> : <UserPlus size={20} color={colors.accent} />}
+              <Text style={[styles.profileTitle, { color: colors.text }]}>
+                {hasUserProfile ? 'Personalized picks active' : 'Unlock personalized picks'}
+              </Text>
+            </View>
+            <Text style={[styles.profileDesc, { color: colors.textSecondary }]}>
+              {hasUserProfile
+                ? 'Your taste profile is stored on this device and powers the V2 section below.'
+                : 'Pick 10+ favorite songs once — AudioFit builds your taste profile and personalizes every recommendation.'}
+            </Text>
+            <Button
+              title={hasUserProfile ? 'Edit favorite songs' : 'Pick favorite songs'}
+              variant={hasUserProfile ? 'secondary' : 'primary'}
+              onPress={() => router.push('/onboarding-favorites' as any)}
+              style={styles.profileCta}
+              textStyle={{ fontSize: 13 }}
+            />
+          </View>
+
+          {/* V2 personalized recommendations */}
+          {hasUserProfile && (
+            <>
+              <View style={styles.recListHeader}>
+                <Sparkles size={16} color={colors.primary} />
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Songs recommended by V2</Text>
+              </View>
+              {v2Error ? (
+                <View style={[styles.emptyCard, { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder }]}>
+                  <Music size={28} color={colors.textSecondary} />
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>Personalized picks unavailable</Text>
+                  <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>{v2Error}</Text>
+                </View>
+              ) : v2Recs.length === 0 ? (
+                <View style={[styles.emptyCard, { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder }]}>
+                  <Music size={28} color={colors.textSecondary} />
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>No personalized picks yet</Text>
+                  <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
+                    Finish an activity with music playing, then refresh to see songs matched to your taste profile.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.recList}>{v2Recs.map((rec, idx) => renderRecCard(rec, idx))}</View>
+              )}
+            </>
+          )}
+
+          {/* V1 generic recommendations (existing flow) */}
           <View style={styles.recListHeader}>
             <ListMusic size={16} color={colors.primary} />
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recommended for you</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Songs recommended by V1</Text>
           </View>
 
           {recommendations.length === 0 ? (
@@ -156,38 +261,7 @@ export default function ForYouScreen() {
             </View>
           ) : (
             <View style={styles.recList}>
-              {recommendations.map((rec, idx) => (
-                <View
-                  key={`${rec.song.artist}-${rec.song.title}-${idx}`}
-                  style={[
-                    styles.recCard,
-                    { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder },
-                  ]}
-                >
-                  <View style={styles.recRank}>
-                    <Text style={[styles.recRankText, { color: colors.primary }]}>{idx + 1}</Text>
-                  </View>
-
-                  <View style={styles.recMeta}>
-                    <Text style={[styles.recTitle, { color: colors.text }]} numberOfLines={1}>
-                      {rec.song.title}
-                    </Text>
-                    <Text style={[styles.recArtist, { color: colors.textSecondary }]} numberOfLines={1}>
-                      {rec.song.artist}{rec.song.bpm ? ` · ${rec.song.bpm} BPM` : ''}
-                    </Text>
-                    {rec.reasons.length > 0 && (
-                      <Text style={[styles.recReason, { color: colors.accent }]} numberOfLines={1}>
-                        {rec.reasons[0]}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={styles.scoreWrap}>
-                    <Gauge size={14} color={colors.primary} />
-                    <Text style={[styles.scoreText, { color: colors.primary }]}>{rec.score}%</Text>
-                  </View>
-                </View>
-              ))}
+              {recommendations.map((rec, idx) => renderRecCard(rec, idx))}
             </View>
           )}
 
@@ -300,6 +374,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginBottom: 14,
+    marginTop: 8,
+  },
+  profileCta: {
+    marginTop: 12,
+    alignSelf: 'stretch',
   },
   sectionTitle: {
     fontSize: 16,
@@ -323,6 +402,7 @@ const styles = StyleSheet.create({
   },
   recList: {
     gap: 10,
+    marginBottom: 16,
   },
   recCard: {
     flexDirection: 'row',

@@ -6,6 +6,7 @@ import { ArrowLeft, Trash2, Music, Clock, MapPin, Footprints, Zap, Activity } fr
 
 import { useTheme } from '@/hooks/use-theme';
 import { store, Workout } from '@/constants/store';
+import { Recommendation } from '@/constants/recommender';
 import LiveMap from '@/components/LiveMap';
 
 function formatTime(secs: number) {
@@ -29,6 +30,10 @@ export default function ActivityDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [workout, setWorkout] = useState<Workout | undefined>(() => store.getWorkoutById(String(id)));
   const [fetching, setFetching] = useState(false);
+  // V2 personalized picks (only with a stored profile; V1 cache above untouched).
+  const [v2Recs, setV2Recs] = useState<Recommendation[]>([]);
+  const [fetchingV2, setFetchingV2] = useState(false);
+  const hasUserProfile = store.hasUserProfile();
 
   useEffect(() => {
     const unsub = store.subscribe(() => setWorkout(store.getWorkoutById(String(id))));
@@ -55,6 +60,28 @@ export default function ActivityDetailScreen() {
       .catch(() => {})
       .finally(() => {
         if (!cancelled) setFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workout?.id]);
+
+  // V2 lazy-fill (once per workout) when a valid profile exists.
+  useEffect(() => {
+    if (!workout || !store.hasUserProfile()) return;
+    const hasTrackIds = workout.songsHeard.some((s) => !!s.trackId);
+    if (!hasTrackIds) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFetchingV2(true);
+    store
+      .getActivityV2Recommendations(workout.id, 5)
+      .then((recs) => {
+        if (!cancelled) setV2Recs(recs);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setFetchingV2(false);
       });
     return () => {
       cancelled = true;
@@ -191,8 +218,53 @@ export default function ActivityDetailScreen() {
           )}
         </View>
 
-        {/* Recommended songs — cached in workout.recommendations */}
-        <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>Recommended for next {workout.type}</Text>
+        {/* V2 personalized picks */}
+        {hasUserProfile && (
+          <>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>Songs recommended by V2</Text>
+            <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Personalized to your taste profile</Text>
+            {fetchingV2 && v2Recs.length === 0 ? (
+              <Text style={[styles.empty, { color: colors.textSecondary }]}>Finding personalized picks…</Text>
+            ) : v2Recs.length === 0 ? (
+              <Text style={[styles.empty, { color: colors.textSecondary }]}>
+                No personalized picks for this activity yet.
+              </Text>
+            ) : (
+              <View style={styles.listGap}>
+                {v2Recs.map((rec, i) => (
+                  <View
+                    key={`v2-${rec.song.artist}-${rec.song.title}-${i}`}
+                    style={[styles.songItem, { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder }]}
+                  >
+                    <View style={[styles.rank, { backgroundColor: colors.primary + '15' }]}>
+                      <Text style={[styles.rankText, { color: colors.primary }]}>{i + 1}</Text>
+                    </View>
+                    <View style={styles.songText}>
+                      <Text style={[styles.songTitle, { color: colors.text }]} numberOfLines={1}>
+                        {rec.song.title}
+                      </Text>
+                      <Text style={[styles.songArtist, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {rec.song.artist}
+                        {rec.song.bpm ? ` · ${rec.song.bpm} BPM` : ''}
+                      </Text>
+                      {rec.reasons.length > 0 && (
+                        <Text style={[styles.recReason, { color: colors.accent }]} numberOfLines={1}>
+                          {rec.reasons[0]}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={[styles.recScore, { color: colors.primary }]}>{rec.score}%</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Recommended songs — cached in workout.recommendations (V1) */}
+        <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>
+          {hasUserProfile ? 'Songs recommended by V1' : `Recommended for next ${workout.type}`}
+        </Text>
         <Text style={[styles.sectionSub, { color: colors.textSecondary }]}>Matched to the songs you played this session</Text>
         {fetching && recs.length === 0 ? (
           <Text style={[styles.empty, { color: colors.textSecondary }]}>Finding recommendations…</Text>

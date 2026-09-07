@@ -5,7 +5,14 @@ import {
   Recommendation,
   buildProfile,
 } from './recommender';
-import { recommendForTracks } from './mlRecommender';
+import {
+  createUserProfile,
+  getV2Recommendations as fetchV2Recommendations,
+  recommendForTracks,
+  resolveAudioFeatures,
+} from './mlRecommender';
+import { FavoriteSongFeatures, isValidUserProfile, meanAudioFeatures } from './audioFeatures';
+import { ProfileManager } from './profileManager';
 
 export interface Workout {
   id: string;
@@ -95,6 +102,9 @@ class AppStore {
   // offline so the recommender can resolve genres without an API call.
   private artistGenres: Record<string, string[]> = {};
 
+  // V2 personalized profile (9D vector created by backend, stored locally).
+  private userProfile: number[] | null = null;
+
   private listeners = new Set<() => void>();
   private isInitialized = false;
 
@@ -120,6 +130,9 @@ class AppStore {
       if (artistGenresData) {
         this.artistGenres = JSON.parse(artistGenresData);
       }
+
+      // V2 profile survives restarts via ProfileManager (single key owner).
+      this.userProfile = await ProfileManager.load();
       
       this.isInitialized = true;
       this.notify();
@@ -662,6 +675,77 @@ class AppStore {
     const trackIds = this.getHeardTrackIds(workoutId);
     if (!trackIds.length) return [];
     return recommendForTracks(trackIds, limit);
+  }
+
+  // ---------------------------------------------------------------------------
+  // V2 personalized profile + recommendations (V1 above is untouched).
+  // Backend creates the profile; ProfileManager owns local persistence.
+  // ---------------------------------------------------------------------------
+
+  getUserProfile(): number[] | null {
+    return this.userProfile;
+  }
+
+  hasUserProfile(): boolean {
+    return isValidUserProfile(this.userProfile);
+  }
+
+  /** Persist a backend-created profile locally (replaces any previous one). */
+  async saveUserProfile(profile: number[]): Promise<void> {
+    await ProfileManager.saveProfile(profile);
+    this.userProfile = ProfileManager.getSync();
+    this.notify();
+  }
+
+  /** Explicit reset (e.g. settings/logout) — recommendations fall back to V1. */
+  async clearUserProfile(): Promise<void> {
+    await ProfileManager.clearProfile();
+    this.userProfile = null;
+    this.notify();
+  }
+
+  /**
+   * Create a profile from ≥10 favorite songs' 9 audio features.
+   * Saves the returned 9D vector locally so V2 becomes available.
+   */
+  async createProfileFromFavorites(favorites: FavoriteSongFeatures[]): Promise<number[]> {
+    console.log('[store] profile creation started, favorites:', favorites.length);
+    const { profile } = await createUserProfile(favorites);
+    await this.saveUserProfile(profile);
+    return profile;
+  }
+
+  /**
+   * Resolve mean 9D features for seed tracks (the "current song" proxy for
+   * list-level V2 calls). Returns null when features are unavailable —
+   * callers must then fall back to V1 instead of sending incomplete data.
+   */
+  private async meanFeaturesForSeeds(trackIds: string[]): Promise<import('./audioFeatures').AudioFeatures | null> {
+    const seeds = [...new Set(trackIds.filter(Boolean))].slice(0, 5);
+    if (seeds.length === 0) return null;
+    const resolved = await Promise.all(seeds.map((id) => resolveAudioFeatures(id)));
+    const estimated = resolved.filter((r) => r.estimated).length;
+    if (estimated > 0) console.log(`[store] ${estimated}/${resolved.length} seed features estimated locally`);
+    return meanAudioFeatures(resolved.map((r) => r.features));
+  }
+
+  /** V2 overall picks (For You). Throws when no profile / no features — use V1. */
+  async getV2Recommendations(limit = 10): Promise<Recommendation[]> {
+    if (!this.hasUserProfile()) {
+      console.log('[store] V1 fallback: no user profile');
+      throw new Error('No user profile — using V1 recommendations.');
+    }
+    const features = await this.meanFeaturesForSeeds(this.getHeardTrackIds());
+    if (!features) throw new Error('Current song features unavailable — using V1 recommendations.');
+    return fetchV2Recommendations(this.userProfile!, features, limit);
+  }
+
+  /** V2 activity picks (post-workout). Throws when no profile / no features. */
+  async getActivityV2Recommendations(workoutId: string, limit = 5): Promise<Recommendation[]> {
+    if (!this.hasUserProfile()) throw new Error('No user profile — using V1 recommendations.');
+    const features = await this.meanFeaturesForSeeds(this.getHeardTrackIds(workoutId));
+    if (!features) throw new Error('Current song features unavailable — using V1 recommendations.');
+    return fetchV2Recommendations(this.userProfile!, features, limit);
   }
 
   // Load the last persisted recommendation run (no recomputation).

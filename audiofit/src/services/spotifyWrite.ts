@@ -31,6 +31,40 @@ export async function searchTrack(token: string, title: string, artist: string):
   };
 }
 
+export interface SpotifySearchHit {
+  id: string;
+  title: string;
+  artist: string;
+  image: string | null;
+  popularity: number | null;
+}
+
+/** Live track search for onboarding/favorites — real Spotify IDs, no catalog. */
+export async function searchSpotifyTracks(token: string, query: string, limit = 20): Promise<SpotifySearchHit[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const res = await fetch(
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=${Math.min(Math.max(limit, 1), 50)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (res.status === 401) throw new Error('401: Spotify session expired');
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`Search failed (${res.status}): ${t.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const items = data?.tracks?.items ?? [];
+  return items
+    .filter((t: any) => t && t.id)
+    .map((t: any) => ({
+      id: t.id as string,
+      title: (t.name ?? 'Unknown title') as string,
+      artist: ((t.artists ?? []).map((a: any) => a.name).join(', ') || 'Unknown artist') as string,
+      image: (t.album?.images?.[0]?.url ?? null) as string | null,
+      popularity: (typeof t.popularity === 'number' ? t.popularity : null) as number | null,
+    }));
+}
+
 export async function resolveTracks(token: string, songs: { title: string; artist: string; reason: string }[]): Promise<ResolvedTrack[]> {
   const out: ResolvedTrack[] = [];
   for (const s of songs) {

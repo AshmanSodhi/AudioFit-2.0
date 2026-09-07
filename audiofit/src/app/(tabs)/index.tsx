@@ -129,7 +129,10 @@ export default function HomeScreen() {
   const [summaryData, setSummaryData] = useState<Workout | null>(null);
 
   // Activity-based song picks for the just-finished workout.
+  // V1 (generic) + V2 (personalized) share the same Recommendation model/UI.
   const [activityRecs, setActivityRecs] = useState<Recommendation[]>([]);
+  const [activityV2Recs, setActivityV2Recs] = useState<Recommendation[]>([]);
+  const [hasUserProfile, setHasUserProfile] = useState(() => store.hasUserProfile());
 
   // ponytail: no expanded state — tap navigates to detail page
 
@@ -327,6 +330,8 @@ export default function HomeScreen() {
 
     store.addWorkout(finalWorkout);
     setActivityRecs([]);
+    setActivityV2Recs([]);
+    setHasUserProfile(store.hasUserProfile());
     store
       .getActivityRecommendations(finalWorkout.id, 5)
       .then((recs) => {
@@ -338,6 +343,16 @@ export default function HomeScreen() {
         console.warn('Activity recommendations failed:', err);
         setActivityRecs([]);
       });
+    // V2 only when a valid profile exists; V1 above always runs.
+    if (store.hasUserProfile()) {
+      store
+        .getActivityV2Recommendations(finalWorkout.id, 5)
+        .then(setActivityV2Recs)
+        .catch((err) => {
+          console.warn('Activity V2 recommendations failed, V1 stands:', err);
+          setActivityV2Recs([]);
+        });
+    }
     setSummaryData(finalWorkout);
     setSessionState('summary');
   };
@@ -348,6 +363,7 @@ export default function HomeScreen() {
       store.removeWorkout(summaryData.id);
     }
     setActivityRecs([]);
+    setActivityV2Recs([]);
     setSummaryData(null);
     setSessionState('idle');
   };
@@ -727,11 +743,55 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* Activity-based recommended songs */}
+          {/* V2 personalized picks (only with a stored profile) */}
+          {hasUserProfile && activityV2Recs.length > 0 && (
+            <>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                Songs recommended by V2
+              </Text>
+              <Text style={[styles.recSectionSub, { color: colors.textSecondary }]}>
+                Personalized to your taste profile
+              </Text>
+              <View style={styles.ledgerList}>
+                {activityV2Recs.map((rec, index) => (
+                  <View
+                    key={`v2-${rec.song.artist}-${rec.song.title}-${index}`}
+                    style={[
+                      styles.ledgerItem,
+                      { backgroundColor: colors.backgroundElement, borderColor: colors.cardBorder },
+                    ]}
+                  >
+                    <View style={[styles.recRank, { backgroundColor: colors.primary + '15' }]}>
+                      <Text style={[styles.recRankText, { color: colors.primary }]}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.ledgerMeta}>
+                      <Text style={[styles.ledgerName, { color: colors.text }]} numberOfLines={1}>
+                        {rec.song.title}
+                      </Text>
+                      <Text style={[styles.ledgerArtist, { color: colors.textSecondary }]} numberOfLines={1}>
+                        {rec.song.artist}
+                        {rec.song.bpm ? ` • ${rec.song.bpm} BPM` : ''}
+                      </Text>
+                      {rec.reasons.length > 0 && (
+                        <Text style={[styles.recReason, { color: colors.accent }]} numberOfLines={1}>
+                          {rec.reasons[0]}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.scoreWrap}>
+                      <Text style={[styles.recScoreText, { color: colors.primary }]}>{rec.score}%</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* Activity-based recommended songs (V1, existing flow) */}
           {activityRecs.length > 0 && (
             <>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                Recommended for your next {activityType}
+                {hasUserProfile ? 'Songs recommended by V1' : `Recommended for your next ${activityType}`}
               </Text>
               <Text style={[styles.recSectionSub, { color: colors.textSecondary }]}>
                 Matched to the songs you played this session
