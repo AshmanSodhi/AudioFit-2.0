@@ -1,4 +1,13 @@
-1. make your dataset from spotify
+1. make your dataset from spotify 
 2. build recommendation system using it -> efficient ways to do it, vector embeddings and all, look into it. 
 3. Add the model to the app. Fix the recommendation and static data available in the app as of now.
-4. 
+
+
+Alternate Model Options:
+V1 : Content Based -> KNN Model
+V2 : Collaborative Based model -> Check for users with similar music taste and then recommend songs from their listening playlist and viceversa
+
+
+high eng model :
+To Build a performance Aware Model - basically which answers "How is this song likely to affect this user's performance?"
+For this we need to create our performance score for each song, based on that , Regression Model , maybe randomForest XGBoost and then predict the recommended songs if they will help in performance, if yes, its recommended. 

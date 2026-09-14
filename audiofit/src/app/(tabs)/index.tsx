@@ -5,6 +5,7 @@ import {
   View,
   ScrollView,
   Pressable,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -90,9 +91,13 @@ export default function HomeScreen() {
   const [activityType, setActivityType] = useState<'walk' | 'run'>('run');
 
   // Active workout metrics state
+  // Wall-clock based so the timer keeps counting while backgrounded/locked
+  // (setInterval is throttled/suspended by the OS in background).
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const timerIntervalRef = useRef<any>(null);
+  const accumulatedSecondsRef = useRef(0);
+  const activeStartRef = useRef<number | null>(null);
 
   // Custom sensor & location tracking hooks
   const isTrackingActive = sessionState === 'tracking' && !isPaused;
@@ -136,13 +141,40 @@ export default function HomeScreen() {
 
   // ponytail: no expanded state — tap navigates to detail page
 
-  // Stopwatch effect
+  // Stopwatch effect — wall-clock based so background/lock time still counts.
   useEffect(() => {
+    const syncTimer = () => {
+      if (activeStartRef.current != null) {
+        const elapsed =
+          accumulatedSecondsRef.current +
+          Math.floor((Date.now() - activeStartRef.current) / 1000);
+        setTimerSeconds(elapsed);
+      }
+    };
+
     if (isTrackingActive) {
-      timerIntervalRef.current = setInterval(() => {
-        setTimerSeconds((prev) => prev + 1);
-      }, 1000);
+      if (activeStartRef.current == null) {
+        activeStartRef.current = Date.now();
+      }
+      syncTimer();
+      timerIntervalRef.current = setInterval(syncTimer, 500);
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') syncTimer();
+      });
+
+      return () => {
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        sub.remove();
+      };
     } else {
+      // Banking elapsed time on pause/background-stop.
+      if (activeStartRef.current != null) {
+        accumulatedSecondsRef.current += Math.floor(
+          (Date.now() - activeStartRef.current) / 1000
+        );
+        activeStartRef.current = null;
+        setTimerSeconds(accumulatedSecondsRef.current);
+      }
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     }
 
@@ -153,6 +185,8 @@ export default function HomeScreen() {
 
   // Start Workout Action
   const handleStartWorkout = () => {
+    accumulatedSecondsRef.current = 0;
+    activeStartRef.current = null;
     setTimerSeconds(0);
     setIsPaused(false);
     setSongsHeardThisSession([]);
@@ -305,9 +339,19 @@ export default function HomeScreen() {
   // Complete Workout & Save Stats
   const handleFinishWorkout = () => {
     gps.stopTracking();
-    
+
+    // Bank any in-flight active time so background time counts in the total.
+    let finalDuration = timerSeconds;
+    if (activeStartRef.current != null) {
+      finalDuration =
+        accumulatedSecondsRef.current +
+        Math.floor((Date.now() - activeStartRef.current) / 1000);
+      accumulatedSecondsRef.current = finalDuration;
+      activeStartRef.current = null;
+      setTimerSeconds(finalDuration);
+    }
     // Calculate final metrics
-    const finalDuration = timerSeconds;
+    // (finalDuration computed above)
     const finalDistance = Math.round(gps.distance * 100) / 100;
     const finalSteps = sensors.steps;
     const avgSpeed = finalDuration > 0 ? Math.round((finalDistance / (finalDuration / 3600)) * 10) / 10 : 0;
